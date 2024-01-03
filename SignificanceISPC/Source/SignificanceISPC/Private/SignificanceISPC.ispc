@@ -16,6 +16,8 @@ struct FStaticAcceleratedManagedSignificanceInfo
     int8 bWasSignificant;
     int8 bDidChangeTickState;
 
+    bool bIsDirty;
+
     // non ispc data
     bool bSupportsTickRateDilation;
 };
@@ -29,9 +31,11 @@ export void ComputeSignififance( const uniform FVector3f ViewPoints[],
                                  const uniform int32 NumViewports,
                                  uniform FStaticAcceleratedManagedSignificanceInfo uniform Data[],
                                  const uniform int32 Begin,
-                                 const uniform int32 End)
+                                 const uniform int32 End,
+                                 uniform bool& bAnyDirty)
 {
     const varying FVector3f v1 = ViewPoints[0];
+    int uniform NumDirty = 0;
 
     foreach(i = Begin ... End)
     {    
@@ -44,20 +48,36 @@ export void ComputeSignififance( const uniform FVector3f ViewPoints[],
             
         const float DistSquared = A+B+C;
 
+
         // > 0 is relevant
         const float NewSignifiance = min(1.f - max((DistSquared / Entry->SignificanceDistanceSquare), 0.0f),1.0);
         const float OldSignifiance = Entry->CurrentSignificance;
 
-        // Update values
-        Entry->CurrentSignificance = NewSignifiance; 
-            
-        Entry->bIsSignificant = NewSignifiance >= 0.01f;
-        Entry->bWasSignificant = OldSignifiance == -1.f ? -1 : OldSignifiance >= 0.01f;
-
         // Set tick interval.
         const int8 NewCurrentTickStage = Entry->NumTickStages * NewSignifiance;
 
-        Entry->bDidChangeTickState = Entry->CurrentTickStage != NewCurrentTickStage;
+        const bool bIsSignificant = NewSignifiance >= 0.01f;
+        const bool bWasSignificant = OldSignifiance == -1.f ? -1 : OldSignifiance >= 0.01f;
+        const bool bDidChangeTickState = Entry->CurrentTickStage != NewCurrentTickStage;
+
+        const bool bIsDirty = bIsSignificant != bWasSignificant || bDidChangeTickState;
+
+        // Update values
+        Entry->CurrentSignificance = NewSignifiance; 
+            
+        Entry->bIsSignificant = bIsSignificant;
+        Entry->bWasSignificant = bWasSignificant;
+
+        Entry->bDidChangeTickState = bDidChangeTickState;
         Entry->CurrentTickStage = NewCurrentTickStage;
+        Entry->bIsDirty = bIsDirty;
+
+        // Is it dirty?
+        if(bIsDirty)
+        {
+            NumDirty += 1;
+        }
     }
+
+    bAnyDirty = NumDirty > 0;
 };
