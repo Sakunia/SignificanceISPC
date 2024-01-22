@@ -143,6 +143,7 @@ public:
 
 	virtual void RegisterStaticNetworkObject(UObject* Object, FName Tag, EPostSignificanceType InPostSignificanceType, FManagedObjectPostSignificanceFunction InPostSignificanceFunction);
 	virtual void RemoveStaticNetworkObject(UObject* Object);
+	virtual void RemoveDynamicObject(UObject* Object);
 
 	UFUNCTION(BlueprintCallable)
 	void AddTestEntry(UObject* Object, bool bDynamic);

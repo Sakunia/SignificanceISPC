@@ -243,7 +243,9 @@ void USignificanceManagerAccelerated::RegisterObject(UObject* Object, FName Tag,
 	const int32 EntryId = StaticEntriesObjects.Add(SignificanceObjectInfo);
 	StaticEntries.Add(ObjectInfo);
 
+	// TODO this can be done more efficient.
 	const bool bIsDynamic = Tag.ToString().Contains(DYNAMIC_TAG);
+	
 	if (bIsDynamic)
 	{
 		INC_DWORD_STAT(STAT_AccSignificanceManager_NumDynamicObjects)
@@ -316,6 +318,42 @@ void USignificanceManagerAccelerated::RemoveStaticNetworkObject(UObject* Object)
 {
 }
 
+void USignificanceManagerAccelerated::RemoveDynamicObject(UObject* Object)
+{
+	if (IsRunningDedicatedServer())
+	{
+		// Server side significance only
+		return;
+	}
+	
+	TWeakObjectPtr<UObject> Target = Object;
+	const int32 Index = StaticEntriesObjects.IndexOfByPredicate([Target]( const FStaticAcceleratedManagedObjectInfo* Entry)
+	{
+		return Entry->ManagedObject == Target;
+	});
+	
+	if (const AActor* Actor = Cast<AActor>(Object))
+	{
+		UniqueIDToEntryMap.Remove(Actor->GetRootComponent()->GetUniqueID());
+	}
+	else if (const USceneComponent* SceneComponent = Cast<USceneComponent>(Object))
+	{
+		UniqueIDToEntryMap.Remove(SceneComponent->GetAttachmentRoot()->GetUniqueID());
+	}
+	
+	DEC_DWORD_STAT(STAT_AccSignificanceManager_NumObjects);
+	
+	FStaticAcceleratedManagedObjectInfo* Entry = StaticEntriesObjects[Index];
+	delete Entry;
+	StaticEntriesObjects[Index] = nullptr;
+	StaticEntriesObjects.RemoveAt(Index);
+
+	StaticEntries.RemoveAt(Index);
+
+	StaticEntries.Shrink();
+	StaticEntriesObjects.Shrink();	
+}
+
 void USignificanceManagerAccelerated::DumpSignificanceDebugData()
 {
 	for (int32 i = 0; i < StaticEntries.Num(); i++)
@@ -334,7 +372,6 @@ void USignificanceManagerAccelerated::DumpSignificanceDebugData()
 				bIsActorTickEnabled = Actor->IsActorTickEnabled();
 			}
 		}
-
 		UE_LOG(LogTemp,Warning,TEXT("[SMA] %s, %s, %f, Tick Enabled: %s "),*Name,bIsSignificant ? TEXT("Enabled") : TEXT("Disabled"), Significance, bIsActorTickEnabled ? TEXT("Enabled") : TEXT("Disabled"));
 	}
 }
